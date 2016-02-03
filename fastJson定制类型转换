@@ -1,0 +1,62 @@
+项目中用到了Geometry数据类型，但是fastJson不支持，需要自定义序列化和反序列化方案。
+* 首先尝试了正常的方式，[参考](http://yywang.info/2014/07/02/fastjson-define-serialize-parser/)
+ * 使用WKTReader和WKTWriter类序列化和反序列化。
+ * 发现有以下问题：
+  * Writer正常write时候，序列化的结果没问题，但是反序列化Reader的时，lexer中的toker为error，不知道为何
+  * Writer采用writeString的时候，反序列化reader能得到正常的结果，但是在外层parse.close的时候，报错，这个可能能通过设置feature绕过去，但是使用起来不方便。
+* 查看了注解的方式后，采用如下方式成功
+  <code>
+    package com.tsinghua.eei.beans;
+
+import com.alibaba.fastjson.annotation.JSONField;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.io.ParseException;
+import com.vividsolutions.jts.io.WKTReader;
+
+public class TagCooData {
+
+	/**
+	 * 坐标	
+	 */
+	private Geometry coordinate;
+	
+	/**
+	 * 不序列化
+	 * @return
+	 */
+	@JSONField(serialize=false)
+	public Geometry getCoordinate() {
+		return coordinate;
+	}
+	/**
+	 * 同样也不反序列化
+	 * @param coordinate
+	 */
+	@JSONField(deserialize=false)
+	public void setCoordinate(Geometry coordinate) {
+		this.coordinate = coordinate;
+	}
+  /**
+	 * 通过这两个函数，做coordiante属性的序列化和反序列化
+	 * @return
+	 */
+	@JSONField(name="coordinate")
+	public String getCoorStr() {
+		if(coordinate != null)
+			return coordinate.toString();
+		return null;
+	}
+	@JSONField(name="coordinate")
+	public void setCoorStr(String coorStr) {
+		Geometry g = null;
+		try {
+			g = (new WKTReader()).read(coorStr);
+		} catch (ParseException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		this.setCoordinate(g);
+	}
+	
+}
+  </code>
