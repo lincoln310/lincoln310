@@ -1,3 +1,3 @@
 # lincoln310
 personal page
-内容见wiki
+内容见(wiki)
