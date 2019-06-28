@@ -1,0 +1,145 @@
+<html>
+<head>
+    <title>A Leaflet map!</title>
+    <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css"/>
+    <script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
+    <!--<script src="project.js" type="text/javascript"></script>-->
+    <script src="mp.js" type="text/javascript"></script>
+    <script src="paho-mqtt-min.js" type="text/javascript"></script>
+    <style>
+        .leaflet-container .leaflet-control-mouseposition {
+            background-color: rgba(255, 255, 255, 0.7);
+            box-shadow: 0 0 5px #bbb;
+            padding: 0 5px;
+            margin: 0;
+            color: #333;
+            font: 11px/1.5 "Helvetica Neue", Arial, Helvetica, sans-serif;
+        }
+
+        #map {
+            width: 100%;
+            height: 95%;
+            /*width: 900px;*/
+            /*height: 500px;*/
+        }
+    </style>
+</head>
+<body>
+<input id="topic_id" placeholder="test" onclick="mqtt_init()"/>
+<button id="start" onclick="start()">start</button>
+<button id="end" onclick="stop()">stop</button>
+<div id="map"></div>
+<script>
+
+    // initialize the map
+    var map = L.map('map', {
+        crs: L.CRS.Simple,
+        minZoom: -5,
+        maxZoom: 25
+    });
+    map.setView([10, 10], 20);
+//    map.attribution('Tiles by <a href="http://mapc.org">MAPC</a>, Data by <a href="http://mass.gov/mgis">MassGIS</a>');
+
+
+    // load a tile layer
+//    L.tileLayer('http://tiles.mapc.org/basemap/{z}/{x}/{y}.png',
+//        {
+//            attribution: 'Tiles by <a href="http://mapc.org">MAPC</a>, Data by <a href="http://mass.gov/mgis">MassGIS</a>',
+//            maxZoom: 23,
+//            minZoom: 15
+//        }).addTo(map);
+//    L.imageOverlay("", [[40.712216, -74.22655], [40.773941, -74.12544]]).addTo(map);
+    L.control.mousePosition().addTo(map);
+
+    p = 1;
+    for(i=0; i<10; i++){
+        b = (1 << i) * 100;
+        var bounds = [[-b, -b], [b, b]];
+        p = L.rectangle(bounds, {color: 'grey', weight: 1, fillOpacity: 0.01}).addTo(map);
+    }
+//    var p = L.polyline(latlngs, {color: 'grey'}).addTo(map);
+    // zoom the map to the polygon
+    map.fitBounds(p.getBounds());
+
+    topicEle = document.getElementById("topic_id");
+    topicEle.defaultValue = 'test';
+    startEle = document.getElementById("start");
+
+    devMarkers = {}
+
+    mc = 1;
+    function start() {
+        key = topicEle.value.trim();
+        if(key == "")
+            key = topicEle.defaultValue;
+        mc = mqtt_init(key);
+    }
+
+    function stop(){
+        mc.disconnect();
+    }
+
+    function mqtt_init(topic) {
+        // Create a client instance
+        client = new Paho.MQTT.Client('broker.mqttdashboard.com', 8000, "mqtt-" + Math.random());
+        // set callback handlers
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+        // connect the client
+        client.connect({onSuccess: onConnect});
+
+        // called when the client connects
+        function onConnect() {
+            // Once a connection has been made, make a subscription and send a message.
+            console.log("onConnect, use key:" + topic);
+            client.subscribe('rtls/' + topic + '/locJson');
+//            client.subscribe("map/coordinates");
+            //message = new Paho.MQTT.Message("Hello");
+            //message.destinationName = "World";
+            //client.send(message);
+        }
+
+        // called when the client loses its connection
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                //    client.connect({onSuccess:onConnect});
+                console.log("onConnectionLost:" + responseObject.errorMessage);
+            }
+        }
+
+        // called when a message arrives
+        function onMessageArrived(message) {
+            console.log("onMessageArrived:" + message.payloadString);
+            try {
+                msg = JSON.parse(message.payloadString);
+//            L.marker(unproject([msg[0], msg[1]])).addTo(map)
+                devid = msg.aid;
+                switch (msg.dt){
+                    case 0: //anchor
+                        break;
+                    case 1: //tag
+                        devid = msg.tid;
+                        break;
+                }
+                if(devid in devMarkers){
+                    devMarkers[devid].setLatLng(msg.loc);
+                } else {
+                    m = L.marker(msg.loc);
+                    devMarkers[devid] = m;
+                    m.addTo(map)
+                        .bindPopup('' + devid)
+                        .openPopup();
+                }
+
+            }catch (e){
+                console.log(e);
+            }
+        }
+
+        return client;
+    }
+
+</script>
+</body>
+</html>
+
